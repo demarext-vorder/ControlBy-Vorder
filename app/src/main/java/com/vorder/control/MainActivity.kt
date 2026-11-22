@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Android 16+: permiso para hablar con dispositivos de la red local (si el sistema no lo conoce, se ignora).
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { }
+            .launch(arrayOf("android.permission.ACCESS_LOCAL_NETWORK"))
         setContent {
             val dark by vm.dark.collectAsState()
             SideEffect {
@@ -61,6 +64,7 @@ private fun App(vm: MainViewModel) {
     val dark by vm.dark.collectAsState()
     val scanning by vm.scanning.collectAsState()
     val found by vm.found.collectAsState()
+    val scanInfo by vm.scanInfo.collectAsState()
     val pair by vm.pair.collectAsState()
     val ctx = LocalContext.current
 
@@ -118,7 +122,7 @@ private fun App(vm: MainViewModel) {
 
     if (showAdd) {
         AddSheet(
-            scanning = scanning, found = found,
+            scanning = scanning, info = scanInfo, found = found,
             onScan = vm::startScan,
             onAdd = vm::addFound,
             onManual = { showManual = true },

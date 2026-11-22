@@ -1,5 +1,7 @@
 package com.vorder.control.net
 
+import android.content.Context
+import android.net.ConnectivityManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -9,6 +11,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -68,6 +71,20 @@ object Net {
         try {
             Socket().use { it.connect(InetSocketAddress(host, port), timeoutMs); true }
         } catch (e: Exception) { false }
+    }
+
+    /** IP local usando el sistema de conexiones de Android (más confiable), con respaldo. */
+    fun localIp(ctx: Context): String? {
+        try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val nets = listOfNotNull(cm.activeNetwork) + cm.allNetworks.toList()
+            for (n in nets) {
+                val lp = cm.getLinkProperties(n) ?: continue
+                lp.linkAddresses.firstOrNull { it.address is Inet4Address && it.address.isSiteLocalAddress }
+                    ?.let { return it.address.hostAddress }
+            }
+        } catch (_: Exception) { }
+        return localIp()
     }
 
     /** IPv4 local del Wi-Fi (ej. 192.168.0.23) o null. */

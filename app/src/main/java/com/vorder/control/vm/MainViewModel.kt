@@ -17,6 +17,7 @@ import com.vorder.control.drivers.Drivers
 import com.vorder.control.drivers.HueDriver
 import com.vorder.control.net.Found
 import com.vorder.control.net.Net
+import com.vorder.control.net.ScanEvent
 import com.vorder.control.net.Scanner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -61,6 +62,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _pair = MutableStateFlow<PairUi?>(null)
     val pair: StateFlow<PairUi?> = _pair.asStateFlow()
+
+    private val _scanInfo = MutableStateFlow<String?>(null)
+    val scanInfo: StateFlow<String?> = _scanInfo.asStateFlow()
 
     private var scanJob: Job? = null
 
@@ -198,12 +202,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun startScan() {
         scanJob?.cancel()
         _found.value = emptyList()
+        _scanInfo.value = null
         _scanning.value = true
         scanJob = viewModelScope.launch {
             try {
-                Scanner.scan().collect { f ->
-                    val known = _devices.value.any { it.host == f.host && it.brand == f.brand }
-                    if (!known && _found.value.none { it.key == f.key }) _found.update { it + f }
+                Scanner.scan(getApplication()).collect { ev ->
+                    when (ev) {
+                        is ScanEvent.Info -> _scanInfo.value = ev.text
+                        is ScanEvent.Hit -> {
+                            val f = ev.found
+                            val known = _devices.value.any { it.host == f.host && it.brand == f.brand }
+                            if (!known && _found.value.none { it.key == f.key }) _found.update { it + f }
+                        }
+                    }
                 }
             } catch (e: Exception) { toast("No se pudo escanear la red") }
             finally { _scanning.value = false }

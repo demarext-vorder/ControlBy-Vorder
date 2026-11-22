@@ -123,6 +123,7 @@ fun LightSheet(
 @Composable
 fun AddSheet(
     scanning: Boolean,
+    info: String?,
     found: List<Found>,
     onScan: () -> Unit,
     onAdd: (Found) -> Unit,
@@ -148,6 +149,7 @@ fun AddSheet(
                     NeonButton(if (found.isEmpty()) "Escanear red" else "Escanear de nuevo", onScan, icon = Icons.Rounded.Search)
                 }
             }
+            if (info != null) Text(info, color = p.sub, fontSize = 12.5.sp, modifier = Modifier.padding(top = 10.dp))
             Spacer(Modifier.height(16.dp))
 
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {

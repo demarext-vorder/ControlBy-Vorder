@@ -2,6 +2,8 @@ package com.vorder.control.net
 
 import com.vorder.control.data.Brand
 import com.vorder.control.data.Kind
+import android.content.Context
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -27,14 +29,27 @@ data class Found(
     val key get() = "${brand.name}@$host"
 }
 
-object Scanner {
-    private val PORTS = listOf(8001, 3000, 6466, 80, 8081, 55443)
+sealed class ScanEvent {
+    data class Info(val text: String) : ScanEvent()
+    data class Hit(val found: Found) : ScanEvent()
+}
 
-    fun scan(): Flow<Found> = channelFlow {
-        val ip = Net.localIp() ?: return@channelFlow
+object Scanner {
+    private val PORTS = listOf(8001, 3000, 3001, 6466, 80, 8081, 55443)
+
+    fun scan(ctx: Context): Flow<ScanEvent> = channelFlow {
+        val ip = Net.localIp(ctx)
+        if (ip == null) {
+            send(ScanEvent.Info("No se detectó una red Wi-Fi. Conectá el celular al Wi-Fi de tu casa (no datos móviles)."))
+            return@channelFlow
+        }
+        send(ScanEvent.Info("Escaneando la red de $ip…"))
+        val withPorts = AtomicInteger(0)
+        val wizCount = AtomicInteger(0)
         val base = ip.substringBeforeLast('.')
         val gate = Semaphore(96)
 
+        coroutineScope {
         // 1) WiZ: broadcast UDP
         launch(Dispatchers.IO) {
             try {
@@ -54,7 +69,7 @@ object Scanner {
                             val host = p.address.hostAddress ?: continue
                             if (host == ip || !seen.add(host)) continue
                             val mac = runCatching { JSONObject(String(p.data, 0, p.length)).getJSONObject("result").optString("mac") }.getOrDefault("")
-                            send(Found(Brand.WIZ, Kind.LIGHT, "Luz WiZ ${host.substringAfterLast('.')}", host, mapOf("mac" to mac)))
+                            wizCount.incrementAndGet(); send(ScanEvent.Hit(Found(Brand.WIZ, Kind.LIGHT, "Luz WiZ ${host.substringAfterLast('.')}", host, mapOf("mac" to mac))))
                         } catch (e: SocketTimeoutException) { /* seguir esperando */ }
                     }
                 }
@@ -67,9 +82,14 @@ object Scanner {
             if (host == ip) continue
             launch {
                 val open = gate.withPermit { PORTS.filter { Net.portOpen(host, it, 450) }.toSet() }
-                if (open.isNotEmpty()) identify(host, open)?.forEach { send(it) }
+                if (open.isNotEmpty()) {
+                    withPorts.incrementAndGet()
+                    identify(host, open)?.forEach { send(ScanEvent.Hit(it)) }
+                }
             }
         }
+        }
+        send(ScanEvent.Info("Listo: ${withPorts.get()} equipos con puertos de control abiertos + ${wizCount.get()} luces WiZ en $ip (red ${ip.substringBeforeLast('.')}.x)"))
     }
 
     private suspend fun identify(host: String, open: Set<Int>): List<Found>? = coroutineScope {
@@ -85,7 +105,7 @@ object Scanner {
                 out += Found(Brand.SAMSUNG, Kind.TV, n, host, mx)
             }
         }
-        if (3000 in open && 8001 !in open) out += Found(Brand.LG, Kind.TV, "TV LG ${host.substringAfterLast('.')}", host, mx)
+        if ((3000 in open || 3001 in open) && 8001 !in open) out += Found(Brand.LG, Kind.TV, "TV LG ${host.substringAfterLast('.')}", host, mx)
         if (6466 in open) out += Found(Brand.GOOGLE_TV, Kind.TV, "Google TV ${host.substringAfterLast('.')}", host, mx)
         if (55443 in open) out += Found(Brand.YEELIGHT, Kind.LIGHT, "Yeelight ${host.substringAfterLast('.')}", host)
 
