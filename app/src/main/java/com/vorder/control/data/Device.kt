@@ -73,6 +73,10 @@ class DeviceStore(ctx: Context) {
         sp.edit().putString("devices", arr.toString()).apply()
     }
 
+    fun updateExtra(id: String, k: String, v: String) {
+        save(load().map { if (it.id == id) it.copy(extra = it.extra + (k to v)) else it })
+    }
+
     var dark: Boolean
         get() = sp.getBoolean("dark", true)
         set(v) { sp.edit().putBoolean("dark", v).apply() }
